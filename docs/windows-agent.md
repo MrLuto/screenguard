@@ -17,7 +17,7 @@ De eerdere serverbeveiligingsbevindingen in [repository-analyse.md](repository-a
 
 ## Installatie
 
-Gebruik de Windows-installer uit een build van deze branch of release. De wizard biedt mDNS, een vaste server-URL en de experimentele cloudaccountmodus. Bestaande configuratie blijft bij herinstallatie behouden.
+Gebruik `screenguard-windows-x86_64-setup.exe` uit `dist/windows` of uit het GitHub Actions-artifact. Dit ene bestand bevat de agent, tray en installatiescripts; er hoeft niets apart uitgepakt te worden. Start het op Windows 11 x64 en accepteer de administratorprompt. Het serveradres `screenguard.fammudde.nl` staat vooraf ingevuld en kan gewijzigd worden. De wizard biedt mDNS, een vaste server-URL en de experimentele cloudaccountmodus. Bestaande configuratie blijft bij herinstallatie behouden.
 
 Een zip-installatie is ook mogelijk. Pak `screenguard-windows-x86_64.zip` uit en voer in een **verhoogde PowerShell** uit:
 

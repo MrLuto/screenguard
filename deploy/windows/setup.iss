@@ -32,11 +32,13 @@ begin
   ConnectionPage.Add('Discover the server on my local network (mDNS)');
   ConnectionPage.Add('Use a server address');
   ConnectionPage.Add('Use a cloud account (experimental)');
-  ConnectionPage.SelectedValueIndex := 0;
+  ConnectionPage.SelectedValueIndex := 1;
   ServerPage := CreateInputQueryPage(ConnectionPage.ID, 'Server address',
     'Enter your ScreenGuard server address', '');
   ServerPage.Add('Server URL (for example https://server.example):', False);
   ServerPage.Add('Administration website URL (optional):', False);
+  ServerPage.Values[0] := 'wss://screenguard.fammudde.nl/ws';
+  ServerPage.Values[1] := 'https://screenguard.fammudde.nl';
   CloudPage := CreateInputQueryPage(ServerPage.ID, 'Cloud account',
     'Enter your ScreenGuard account email', 'Cloud mode is experimental.');
   CloudPage.Add('Email:', False);
