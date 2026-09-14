@@ -1,6 +1,9 @@
 [workspace]
 members = [
     "crates/common",
+    "crates/agent-core",
+    "crates/agent-windows",
+    "crates/tray-windows",
     "crates/agent",
     "crates/server",
     "crates/dummy-server",

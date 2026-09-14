@@ -4,6 +4,7 @@ version = "0.10.9"
 edition = "2024"
 
 [dependencies]
+agent-core = { path = "../agent-core" }
 common = { path = "../common" }
 
 # async runtime

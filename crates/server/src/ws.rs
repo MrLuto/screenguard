@@ -172,6 +172,7 @@ async fn handle_agent_hello(
     db::update_agent_hello(&state.db, agent.id, &hello.hostname, &hello.timezone, &hello.agent_version).await?;
     let web_filter_available = hello.capabilities.iter().any(|c| c == "web_filter");
     db::update_agent_web_filter(&state.db, agent.id, web_filter_available).await?;
+    db::set_agent_platform(&state.db, agent.id, &hello.capabilities).await?;
     tracing::info!("Agent '{}' connected (v{}, config_v{}, capabilities={:?})", hello.hostname, hello.agent_version, hello.last_config_version, hello.capabilities);
 
     let agent_users = db::list_agent_users(&state.db, agent.id).await?;
@@ -248,7 +249,10 @@ async fn handle_agent_message(
     match envelope.msg_type.as_str() {
         MSG_AGENT_HELLO => {
             let hello: AgentHello = envelope.parse_payload()?;
-            db::update_agent_hello(&state.db, agent_id, &hello.hostname, &hello.timezone, &hello.agent_version).await?;
+            let agent = db::get_agent_by_id(&state.db, agent_id).await?
+                .ok_or_else(|| anyhow::anyhow!("Agent not found"))?;
+            anyhow::ensure!(agent.machine_id == hello.machine_id, "Cannot change identity on a live connection");
+            handle_agent_hello(hello, state, out_tx.clone()).await?;
         }
 
         MSG_USER_LIST_UPDATE => {
@@ -308,4 +312,23 @@ async fn handle_agent_message(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn hello_refresh_on_live_connection_returns_current_config() {
+        let pool = db::tests::test_pool().await;
+        let agent = db::upsert_agent_pending(&pool,"machine","Windows","UTC","0.10.9").await.unwrap();
+        db::accept_agent(&pool,agent.id,"hash").await.unwrap();
+        let state = AppState::new(pool,"secret".into(),24);
+        let (tx,mut rx) = mpsc::channel(8);
+        let hello = AgentHello { machine_id:"machine".into(), hostname:"Windows".into(), timezone:"Europe/Amsterdam".into(), agent_version:"0.10.9".into(), last_config_version:0, capabilities:vec!["platform:windows".into()], cloud_account:None };
+        let text = WssMessage::new(MSG_AGENT_HELLO,&hello).unwrap().to_json().unwrap();
+        handle_agent_message(&text,&state,agent.id,&tx).await.unwrap();
+        assert_eq!(rx.try_recv().unwrap().msg_type,MSG_CONFIG_PUSH);
+        assert_eq!(db::agent_platform(&state.db,agent.id).await.unwrap(),"windows");
+        assert_eq!(db::get_agent_by_id(&state.db,agent.id).await.unwrap().unwrap().timezone,"Europe/Amsterdam");
+    }
 }

@@ -1,0 +1,38 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: screenguard
+  namespace: screenguard
+  annotations:
+    # Adapt to the existing issuer, or remove when supplying TLS yourself.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [screenguard.fammudde.nl]
+      secretName: screenguard-tls
+  rules:
+    - host: screenguard.fammudde.nl
+      http:
+        paths:
+          - path: /ws
+            pathType: Exact
+            backend:
+              service:
+                name: screenguard
+                port:
+                  name: api
+          - path: /api/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: screenguard
+                port:
+                  name: api
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: screenguard
+                port:
+                  name: web

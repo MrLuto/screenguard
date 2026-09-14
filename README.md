@@ -50,6 +50,17 @@ See the [screenguard-mobile repo](https://github.com/adambie/screenguard-mobile)
 
 The server and agent can run on the same machine or on separate machines. The agent connects to the server over a persistent WebSocket connection. mDNS (Avahi/Bonjour) is used for automatic discovery on the local network.
 
+## Windows agent
+
+A Windows 11 x64 service and tray companion are available in this repository.
+They share policy/storage code with the Linux agent and use the existing server
+and administration clients. Windows web filtering uses per-user HTTP(S) proxies
+and Windows Filtering Platform rules.
+
+See [Windows installation and architecture](docs/windows-agent.md) and the
+[Windows acceptance matrix](docs/windows-acceptance.md). The Windows port requires
+interactive Windows validation before a production release.
+
 ## Requirements
 
 - Linux with systemd
@@ -300,3 +311,6 @@ sudo systemctl restart screenguard-agent
 ## License
 
 GPL-3.0 — see [LICENSE](LICENSE).
+
+For a single-instance k3s deployment at `screenguard.fammudde.nl`, see
+[the k3s handoff](docs/k3s-installatie.md) and `deploy/k3s/`.

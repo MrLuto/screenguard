@@ -63,6 +63,11 @@ async fn create_tables(pool: &DbPool) -> Result<()> {
             created_at           INTEGER NOT NULL,
             web_filter_available INTEGER
         )",
+        "CREATE TABLE IF NOT EXISTS agent_platforms (
+            agent_id TEXT NOT NULL PRIMARY KEY REFERENCES agents(id) ON DELETE CASCADE,
+            platform TEXT NOT NULL,
+            architecture TEXT NOT NULL
+        )",
         "CREATE TABLE IF NOT EXISTS user_profiles (
             id              TEXT NOT NULL PRIMARY KEY,
             display_name    TEXT NOT NULL,
@@ -1586,11 +1591,11 @@ pub fn parse_time(s: &str) -> Option<NaiveTime> {
 // ── tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use common::models::LocalUser;
 
-    async fn test_pool() -> DbPool {
+    pub(crate) async fn test_pool() -> DbPool {
         sqlx::any::install_default_drivers();
         let pool = sqlx::pool::PoolOptions::<sqlx::Any>::new()
             .max_connections(1)
@@ -1927,4 +1932,17 @@ mod tests {
         .await
         .unwrap()
     }
+}
+
+/// Capability metadata is additive: legacy agents remain Linux by default.
+pub async fn set_agent_platform(pool: &DbPool, id: Uuid, capabilities: &[String]) -> Result<()> {
+    let platform = if capabilities.iter().any(|c| c == "platform:windows") { "windows" } else { "linux" };
+    let architecture = if capabilities.iter().any(|c| c == "arch:x86_64") { "x86_64" } else { "unknown" };
+    sqlx::query("INSERT INTO agent_platforms (agent_id,platform,architecture) VALUES ($1,$2,$3) ON CONFLICT(agent_id) DO UPDATE SET platform=$2, architecture=$3")
+        .bind(id.to_string()).bind(platform).bind(architecture).execute(pool).await?;
+    Ok(())
+}
+pub async fn agent_platform(pool: &DbPool, id: Uuid) -> Result<String> {
+    Ok(sqlx::query_scalar::<_,String>("SELECT platform FROM agent_platforms WHERE agent_id=$1")
+        .bind(id.to_string()).fetch_optional(pool).await?.unwrap_or_else(|| "linux".into()))
 }

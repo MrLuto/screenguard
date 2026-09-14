@@ -18,6 +18,7 @@ pub struct AgentResponse {
     pub machine_id: String,
     pub display_name: String,
     pub hostname: String,
+    pub platform: String,
     pub timezone: String,
     pub status: String,
     pub online: bool,
@@ -38,13 +39,14 @@ pub async fn list_agents(
     let latest = state.latest_agent_release.read().await;
     let mut result = Vec::new();
     for a in agents {
+        let platform = db::agent_platform(&state.db, a.id).await.map_err(internal)?;
         let user_count = db::list_agent_users(&state.db, a.id)
             .await
             .map(|u| u.len())
             .unwrap_or(0);
         let pairing_code = pending.get(&(DEFAULT_TENANT.to_string(), a.machine_id.clone())).map(|h| h.pairing_code.clone());
         let upgradeable = a.agent_version.as_deref()
-            .zip(latest.as_deref())
+            .zip(latest.for_platform(&platform))
             .map_or(false, |(agent_v, latest_v)| release_check::is_older(agent_v, latest_v));
         result.push(AgentResponse {
             online: online.values().any(|h| h.agent_id == a.id),
@@ -52,6 +54,7 @@ pub async fn list_agents(
             machine_id: a.machine_id,
             display_name: a.display_name,
             hostname: a.hostname,
+            platform,
             timezone: a.timezone,
             status: a.status,
             last_seen_at: a.last_seen_at,
@@ -75,15 +78,16 @@ pub async fn get_agent(
     let latest = state.latest_agent_release.read().await;
     let user_count = db::list_agent_users(&state.db, a.id).await.map(|u| u.len()).unwrap_or(0);
     let pairing_code = pending.get(&(DEFAULT_TENANT.to_string(), a.machine_id.clone())).map(|h| h.pairing_code.clone());
+    let platform = db::agent_platform(&state.db, a.id).await.map_err(internal)?;
     let upgradeable = a.agent_version.as_deref()
-        .zip(latest.as_deref())
+        .zip(latest.for_platform(&platform))
         .map_or(false, |(agent_v, latest_v)| release_check::is_older(agent_v, latest_v));
     Ok(Json(serde_json::json!(AgentResponse {
         online: online.values().any(|h| h.agent_id == a.id),
         id: a.id, machine_id: a.machine_id, display_name: a.display_name,
         hostname: a.hostname, timezone: a.timezone, status: a.status,
         last_seen_at: a.last_seen_at, agent_version: a.agent_version,
-        user_count, pairing_code, upgradeable,
+        user_count, pairing_code, upgradeable, platform,
         web_filter_available: a.web_filter_available,
     })))
 }

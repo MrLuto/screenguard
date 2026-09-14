@@ -1,0 +1,15 @@
+# Build the checked-out source, including Windows protocol support.
+FROM rust:1-bookworm AS build
+WORKDIR /src
+RUN apt-get update && apt-get install -y --no-install-recommends libsystemd-dev && rm -rf /var/lib/apt/lists/*
+COPY . .
+RUN cargo build --locked --release -p server
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libsystemd0 && rm -rf /var/lib/apt/lists/* \
+    && mkdir /data && chown 10001:10001 /data
+COPY --from=build /src/target/release/parental-controller-server /usr/local/bin/screenguard-server
+USER 10001:10001
+ENV SCREENGUARD_SERVER_DB=/data/server.db
+EXPOSE 8080
+ENTRYPOINT ["screenguard-server"]

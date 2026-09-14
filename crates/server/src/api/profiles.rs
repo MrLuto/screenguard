@@ -98,7 +98,10 @@ pub async fn delete_profile(
     Path(id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     db::get_profile(&state.db, id).await.map_err(internal)?.ok_or_else(not_found)?;
+    let affected = db::get_agent_users_for_profile(&state.db, id).await.map_err(internal)?;
     db::delete_profile(&state.db, id).await.map_err(internal)?;
+    let agents: std::collections::HashSet<_> = affected.into_iter().map(|u| u.agent_id).collect();
+    for agent_id in agents { push_agent_snapshot(&state, agent_id).await.map_err(internal)?; }
     Ok(Json(serde_json::json!({ "message": "Profile deleted" })))
 }
 
@@ -305,8 +308,13 @@ pub async fn patch_agent_user(
 
     if let Some(profile_id) = body.profile_id {
         bump_and_propagate(&state, profile_id).await.map_err(internal)?;
-    } else if let Some(profile_id) = au.profile_id {
-        bump_and_propagate(&state, profile_id).await.map_err(internal)?;
+    } else {
+        if let Some(profile_id) = au.profile_id {
+            bump_and_propagate(&state, profile_id).await.map_err(internal)?;
+        }
+        // The unlinked agent is no longer discoverable by querying the old
+        // profile's members, but must still receive removal of its cached policy.
+        push_agent_snapshot(&state, au.agent_id).await.map_err(internal)?;
     }
 
     Ok(Json(serde_json::json!({ "message": "User linked to profile" })))
@@ -460,5 +468,46 @@ mod tests {
             let remaining = (limit + adjustments + added_adjustment - used).max(0);
             assert_eq!(remaining, 0);
         }
+    }
+}
+
+async fn push_agent_snapshot(state: &AppState, agent_id: Uuid) -> anyhow::Result<()> {
+    // Version zero makes older clients request a full snapshot on reconnect as
+    // well; profile-local versions cannot describe removal of the last profile.
+    let push = remaining::build_config_push(&state.db, agent_id, 0).await?;
+    let message = WssMessage::new(MSG_CONFIG_PUSH, &push)?;
+    state.send_to_agent_id(DEFAULT_TENANT, agent_id, message).await;
+    Ok(())
+}
+
+#[cfg(test)]
+mod removal_tests {
+    use super::*;
+    use crate::state::AgentHandle;
+    async fn fixture() -> (Arc<AppState>, Uuid, Uuid, tokio::sync::mpsc::Receiver<WssMessage>) {
+        let pool=crate::db::tests::test_pool().await;
+        let a=db::upsert_agent_pending(&pool,"windows","PC","UTC","0.10.9").await.unwrap();
+        let p=db::create_profile(&pool,"Child").await.unwrap();
+        db::upsert_agent_users(&pool,a.id,&[common::models::LocalUser { local_uid:1,username:"child".into(),display_name:"Child".into() }]).await.unwrap();
+        let u=db::get_agent_user(&pool,a.id,1).await.unwrap().unwrap();
+        db::update_agent_user(&pool,u.id,Some(p.id),Some("managed")).await.unwrap();
+        let state=AppState::new(pool,"secret".into(),24);
+        let (tx,rx)=tokio::sync::mpsc::channel(8);
+        state.add_online(DEFAULT_TENANT,"windows".into(),AgentHandle { agent_id:a.id,outbound_tx:tx }).await;
+        (state,p.id,u.id,rx)
+    }
+    #[tokio::test]
+    async fn unlinking_last_user_removes_cached_policy() {
+        let (state,_,user,mut rx)=fixture().await;
+        patch_agent_user(State(state),Path(user),Json(PatchAgentUserBody { profile_id:None,status:Some("unmanaged".into()) })).await.unwrap();
+        let push: common::messages::ConfigPush=rx.try_recv().unwrap().parse_payload().unwrap();
+        assert!(push.users.is_empty());
+    }
+    #[tokio::test]
+    async fn deleting_profile_notifies_its_former_agent() {
+        let (state,profile,_,mut rx)=fixture().await;
+        delete_profile(State(state),Path(profile)).await.unwrap();
+        let push: common::messages::ConfigPush=rx.try_recv().unwrap().parse_payload().unwrap();
+        assert!(push.users.is_empty());
     }
 }

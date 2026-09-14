@@ -57,7 +57,7 @@ impl AppState {
             online: Arc::new(RwLock::new(HashMap::new())),
             pending: Arc::new(RwLock::new(HashMap::new())),
             log_requests: Arc::new(RwLock::new(HashMap::new())),
-            latest_agent_release: Arc::new(RwLock::new(None)),
+            latest_agent_release: Arc::new(RwLock::new(Default::default())),
         })
     }
 

@@ -63,7 +63,7 @@
           <dt class="col-5" style="color:var(--t2);font-weight:500;margin-bottom:0">{{ t('agent.label_hostname') }}</dt>
           <dd class="col-7 mb-0">{{ agent.hostname }}</dd>
           <dt class="col-5" style="color:var(--t2);font-weight:500;margin-bottom:0">{{ t('agent.label_version') }}</dt>
-          <dd class="col-7 mb-0">{{ agent.agent_version or '—' }}</dd>
+          <dd class="col-7 mb-0">{{ agent.agent_version or '—' }} · {{ (agent.platform or 'linux')|capitalize }}</dd>
           <dt class="col-5" style="color:var(--t2);font-weight:500;margin-bottom:0">{{ t('agent.label_timezone') }}</dt>
           <dd class="col-7 mb-0">{{ agent.timezone or '—' }}</dd>
           <dt class="col-5" style="color:var(--t2);font-weight:500;margin-bottom:0">{{ t('agent.label_last_seen') }}</dt>

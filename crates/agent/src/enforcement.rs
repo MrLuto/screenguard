@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::{Datelike, Local, NaiveTime};
+use chrono::Local;
 use common::models::EnforceAction;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -31,75 +31,7 @@ pub async fn evaluate_enforcement(
 }
 
 fn offline_evaluate(uid: u32, db: &Db) -> Result<EnforceAction> {
-    let now = Local::now();
-    let today = now.date_naive();
-    let weekday = today.weekday().num_days_from_monday() as u8;
-
-    // 1. Check schedule windows.
-    let schedules = db.get_cached_schedules(uid)?;
-    let (in_window, window_remaining_minutes) = if schedules.is_empty() {
-        (true, i32::MAX)
-    } else {
-        let current_time = now.time();
-        let matching = schedules.iter().find(|s| {
-            s.day_of_week == weekday
-                && parse_time(&s.start_time)
-                    .zip(parse_time(&s.end_time))
-                    .map(|(start, end)| current_time >= start && current_time <= end)
-                    .unwrap_or(false)
-        });
-        match matching {
-            None => (false, 0),
-            Some(s) => {
-                let end = parse_time(&s.end_time).unwrap_or(NaiveTime::from_hms_opt(23, 59, 0).unwrap());
-                let secs = (end - current_time).num_seconds().max(0);
-                (true, (secs / 60) as i32)
-            }
-        }
-    };
-
-    if !in_window {
-        tracing::info!("uid={uid}: outside allowed schedule window (offline evaluation)");
-        return Ok(EnforceAction::Lock);
-    }
-
-    // 2. Check daily limit.
-    let limits = db.get_cached_daily_limits(uid)?;
-    let today_str = today.to_string();
-    let time_remaining_minutes = if let Some(limit) = limits.iter().find(|l| l.day_of_week == weekday) {
-        let used_secs = db.get_usage_seconds(uid, &today_str)?;
-        let adjustment = db.get_cached_adjustment(uid, &today_str)?;
-        let used_minutes = (used_secs / 60) as i32;
-        limit.allowed_minutes as i32 + adjustment - used_minutes
-    } else {
-        i32::MAX // no limit for this day
-    };
-
-    // 3. Effective remaining.
-    let remaining = time_remaining_minutes.min(window_remaining_minutes);
-
-    if remaining <= 0 {
-        tracing::info!("uid={uid}: daily time limit reached (offline evaluation)");
-        return Ok(EnforceAction::Lock);
-    }
-
-    // 4. Warning thresholds — warn if remaining is at or below any configured threshold.
-    let enforcement = db.get_cached_enforcement(uid)?;
-    if enforcement.warning_thresholds.iter().any(|&t| remaining <= t as i32) {
-        return Ok(EnforceAction::Warn);
-    }
-
-    Ok(EnforceAction::Allow)
-}
-
-fn parse_time(s: &str) -> Option<NaiveTime> {
-    let parts: Vec<&str> = s.split(':').collect();
-    if parts.len() < 2 {
-        return None;
-    }
-    let h: u32 = parts[0].parse().ok()?;
-    let m: u32 = parts[1].parse().ok()?;
-    NaiveTime::from_hms_opt(h, m, 0)
+    agent_core::policy::evaluate(db, uid, Local::now().naive_local())
 }
 
 #[derive(Debug, PartialEq, Eq)]

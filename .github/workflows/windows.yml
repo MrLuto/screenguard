@@ -1,0 +1,42 @@
+name: Windows agent and shared core
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y libsystemd-dev
+      - run: cargo test --workspace --locked
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt -p agent-core -p agent-windows -p tray-windows -- --check
+      - run: cargo clippy -p agent-core -p agent-windows -p tray-windows --all-targets --locked -- -D warnings
+      - run: cargo test -p common -p agent-core --locked
+      - run: cargo build -p agent-windows -p tray-windows --release --locked
+      - name: Parse PowerShell scripts
+        shell: pwsh
+        run: |
+          Get-ChildItem deploy/windows/*.ps1 | ForEach-Object {
+            $errors = $null; $tokens = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors) { throw ($errors | Out-String) }
+          }
+      - name: Build Windows installer
+        shell: pwsh
+        run: ./deploy/windows/package.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenguard-windows-x86_64
+          path: dist/windows/*

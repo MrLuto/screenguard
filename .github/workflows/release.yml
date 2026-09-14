@@ -59,9 +59,33 @@ jobs:
           name: binaries-${{ matrix.target }}
           path: dist/
 
+  windows:
+    name: Build Windows x64
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Set Windows version
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.Substring(1)
+          foreach ($path in @('crates/agent-windows/Cargo.toml','crates/tray-windows/Cargo.toml')) {
+            $text = (Get-Content $path -Raw) -replace '(?m)^version = ".*"', ('version = "'+$version+'"')
+            [IO.File]::WriteAllText($path, $text)
+          }
+      - run: cargo test -p common -p agent-core
+      - run: cargo build -p agent-windows -p tray-windows --release
+      - name: Package Windows release
+        shell: pwsh
+        run: ./deploy/windows/package.ps1 -Version $env:GITHUB_REF_NAME.Substring(1)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries-windows-x86_64
+          path: dist/windows/*
+
   release:
     name: Publish release
-    needs: [build]
+    needs: [build, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

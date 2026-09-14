@@ -1,2 +1,7 @@
 /target/
 .claude/worktrees/
+
+/dist/
+/deploy/windows/package/
+/deploy/windows/output/
+**/__pycache__/

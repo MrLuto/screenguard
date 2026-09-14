@@ -1,0 +1,123 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: screenguard
+  namespace: screenguard
+data:
+  server.toml: |
+    listen_addr = "0.0.0.0"
+    listen_port = 8080
+    db_path = "/data/server.db"
+    enable_mdns = false
+    github_repo = "MrLuto/screenguard"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: screenguard-data
+  namespace: screenguard
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: screenguard
+  namespace: screenguard
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: screenguard
+  template:
+    metadata:
+      labels:
+        app: screenguard
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: server
+          # Replace BUILD_TAG with the git commit used to build both images.
+          image: ghcr.io/mrluto/screenguard-server:BUILD_TAG
+          ports:
+            - name: api
+              containerPort: 8080
+          env:
+            - name: SCREENGUARD_SERVER_CONFIG
+              value: /etc/screenguard/server.toml
+            - name: SCREENGUARD_SERVER_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: screenguard-secrets
+                  key: jwt-secret
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/screenguard
+              readOnly: true
+          readinessProbe:
+            tcpSocket:
+              port: api
+          livenessProbe:
+            tcpSocket:
+              port: api
+            initialDelaySeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+        - name: webui
+          image: ghcr.io/mrluto/screenguard-webui:BUILD_TAG
+          ports:
+            - name: web
+              containerPort: 5000
+          env:
+            - name: SERVER_URL
+              value: http://127.0.0.1:8080
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: screenguard-secrets
+                  key: webui-secret
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: web
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: screenguard-data
+        - name: config
+          configMap:
+            name: screenguard
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: screenguard
+  namespace: screenguard
+spec:
+  selector:
+    app: screenguard
+  ports:
+    - name: api
+      port: 8080
+      targetPort: api
+    - name: web
+      port: 5000
+      targetPort: web
