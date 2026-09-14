@@ -21,7 +21,7 @@ pub async fn open(cfg: &crate::config::ServerConfig) -> Result<DbPool> {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("Failed to create DB directory: {}", parent.display()))?;
         }
-        (format!("sqlite:{}", cfg.db_path), true)
+        (format!("sqlite:{}?mode=rwc", cfg.db_path), true)
     };
 
     let pool = sqlx::AnyPool::connect(&url)
@@ -1945,4 +1945,22 @@ pub async fn set_agent_platform(pool: &DbPool, id: Uuid, capabilities: &[String]
 pub async fn agent_platform(pool: &DbPool, id: Uuid) -> Result<String> {
     Ok(sqlx::query_scalar::<_,String>("SELECT platform FROM agent_platforms WHERE agent_id=$1")
         .bind(id.to_string()).fetch_optional(pool).await?.unwrap_or_else(|| "linux".into()))
+}
+
+#[cfg(test)]
+mod fresh_database_tests {
+    #[tokio::test]
+    async fn creates_database_on_empty_volume() {
+        let dir = std::env::temp_dir().join(format!("screenguard-fresh-{}", uuid::Uuid::new_v4()));
+        let path = dir.join("server.db");
+        let cfg = crate::config::ServerConfig {
+            db_path: path.to_string_lossy().into_owned(),
+            ..Default::default()
+        };
+        let pool = super::open(&cfg).await.unwrap();
+        assert!(path.is_file());
+        assert_eq!(super::admin_count(&pool).await.unwrap(), 0);
+        pool.close().await;
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }
