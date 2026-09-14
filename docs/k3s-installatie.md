@@ -3,9 +3,17 @@
 Repository: **https://github.com/MrLuto/screenguard**, branch **main**.
 Doel: **https://screenguard.fammudde.nl**. Deploy de Rust-server en Python-webinterface; de Windows-agent wordt apart op Windows 11 x64 geïnstalleerd.
 
+## Images automatisch publiceren
+
+Na een push op `main` publiceert GitHub Actions **Publish container images** beide images naar GHCR, voor amd64 en arm64. Handmatig starten kan via Actions → Publish container images → Run workflow. De workflow gebruikt `GITHUB_TOKEN`; er hoeft geen persoonlijke token in de repository.
+
+Wacht tot beide jobs slagen. De tag staat in de workflow-summary en is de eerste 12 tekens van de gebouwde commit. Er is ook `latest`, maar gebruik voor deployments de commit-tag en vervang daarmee `BUILD_TAG` in `deploy/k3s/app.yaml`. Bij een mislukte job niet deployen: beide images moeten voor dezelfde tag bestaan.
+
+GHCR-packages zijn bij de eerste publicatie standaard privé. Maak beide packages via GitHub → Packages → Package settings openbaar, of stel een GHCR-pullsecret in het cluster in en voeg `imagePullSecrets` toe aan de Pod. Alleen een publieke Git-repository maakt de images nog niet publiek.
+
 ## Opdracht
 
-1. Haal de nieuwste commit op. Bouw onderstaande images uit dezelfde commit en push ze naar GHCR (of de bestaande clusterregistry). Gebruik niet `deploy/Dockerfile.server`: die downloadt upstream-binaries. Bouw voor de architectuur van de k3s-nodes; onderstaande commands gebruiken die van de buildmachine.
+1. Haal de nieuwste commit op. Gebruik bij voorkeur de hierboven gepubliceerde images. Als alternatief: bouw onderstaande images uit dezelfde commit en push ze naar GHCR (of de bestaande clusterregistry). Gebruik niet `deploy/Dockerfile.server`: die downloadt upstream-binaries. Bouw voor de architectuur van de k3s-nodes; onderstaande commands gebruiken die van de buildmachine.
 
    ```bash
    git clone https://github.com/MrLuto/screenguard.git
