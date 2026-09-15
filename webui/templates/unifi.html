@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}UniFi — ScreenGuard{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h1>UniFi-netwerk</h1><p class="text-muted">Koppel apparaten aan een profiel en beheer hun internettoegang.</p></div>
+  <form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="sync"><button class="btn btn-outline-primary">Synchroniseren</button></form>
+</div>
+{% if connection.error %}<div class="alert alert-danger">{{ connection.error }} — gegevens kunnen verouderd zijn.</div>{% endif %}
+{% if not connection.configured %}<div class="alert alert-info">Nog niet verbonden. Configureer de gateway-URL en API-key op de server volgens docs/unifi-integratie.md. API-keys worden niet via deze pagina opgeslagen.</div>{% endif %}
+<div class="row g-3 mb-3">
+  <div class="col-md-4"><div class="card p-3"><strong>Handhaving</strong>{{ 'Ingeschakeld' if connection.enforcement else 'Voorbeeldmodus — geen wijzigingen aan UniFi' }}</div></div>
+  <div class="col-md-4"><div class="card p-3"><strong>Verbonden apparaten</strong>{{ connection.get('connected_clients', '—') }}</div></div>
+  <div class="col-md-4"><div class="card p-3"><strong>Laatste synchronisatie</strong>{{ connection.last_sync|time_ago }}{% if connection.stale %} (verouderd){% endif %}</div></div>
+</div>
+<p>Blokkeren geldt voor verkeer van de gekozen bronzone naar de gekozen internetzone, via wifi én kabel. Het verbreekt de wifi-verbinding niet. Netwerkactiviteit telt niet mee als schermtijd; daglimieten gebruiken het gemeten agentgebruik. Een firewallregel bewijst nog niet dat verkeer daadwerkelijk stopt.</p>
+{% if connection.firewall_error %}<div class="alert alert-warning">{{ connection.firewall_error }}</div>{% endif %}
+{% if connection.configured and not connection.site_id %}<div class="alert alert-info">Kies een site-ID in de serverconfiguratie: {% for site in connection.sites %}{{ site.name }}: <code>{{ site.id }}</code> {% endfor %}</div>{% endif %}
+<div class="table-responsive"><table class="table align-middle">
+<thead><tr><th>Apparaat</th><th>Profiel en beleid</th><th>Resultaat</th></tr></thead><tbody>
+{% for client in data.get('clients', []) %}
+<tr><td><strong>{{ client.data.name }}</strong><br><code>{{ client.mac }}</code><br>{{ client.data.ip or '—' }} · {{ client.data.type }}<br><small>Laatst gezien: {{ client.last_seen|time_ago }}</small></td>
+<td><form method="post" class="d-flex flex-column gap-2">
+<input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="mac" value="{{ client.mac }}">
+<select name="profile_id" class="form-select" aria-label="Profiel"><option value="">Niet gekoppeld</option>{% for profile in profiles %}<option value="{{ profile.id }}" {% if client.profile_id == profile.id %}selected{% endif %}>{{ profile.display_name }}</option>{% endfor %}</select>
+<select name="mode" class="form-select" aria-label="Beleid">{% for value, label in [('observe','Alleen inzicht / eigen blokkade vrijgeven'),('follow','Volg schema en daglimiet'),('block','Internet blokkeren')] %}<option value="{{ value }}" {% if client.mode == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+<label><input type="checkbox" name="excluded" {% if client.excluded %}checked{% endif %}> Uitsluiten van handhaving</label><button class="btn btn-sm btn-primary">Opslaan</button></form></td>
+<td>{% if client.mac in connection.get('protected_macs', []) %}<strong>Uitgesloten door serverconfiguratie</strong><br>{% endif %}{{ client.result }}{% if client.policy_id %}<br><small>UniFi-regel: {{ client.policy_id }}</small>{% endif %}</td></tr>
+{% else %}<tr><td colspan="3">Nog geen apparaten ontdekt.</td></tr>{% endfor %}
+</tbody></table></div>
+<h2 class="h5">Netwerkapparatuur — actuele meting</h2>
+<p class="text-muted">Uplink-snelheden zijn van de apparatuur, niet het verbruik per kind. Ontbrekende metingen worden niet als nul weergegeven.</p>
+<div class="table-responsive"><table class="table"><thead><tr><th>Apparaat</th><th>CPU / geheugen</th><th>Ontvangen / verzenden (bit/s)</th></tr></thead><tbody>
+{% for item in connection.get('statistics', []) %}<tr><td>{{ item.name }}</td><td>{{ item.cpu if item.cpu is defined and item.cpu is not none else '—' }} / {{ item.memory if item.memory is defined and item.memory is not none else '—' }} %</td><td>{% if item.error %}{{ item.error }}{% else %}{{ item.rx_bps if item.rx_bps is not none else '—' }} / {{ item.tx_bps if item.tx_bps is not none else '—' }}{% endif %}</td></tr>{% else %}<tr><td colspan="3">Geen metingen beschikbaar.</td></tr>{% endfor %}
+</tbody></table></div>
+<details class="mb-3"><summary>Netwerken en zones</summary>
+{% for key in ['networks', 'zones', 'devices'] %}<h3 class="h6 mt-3">{{ key }}</h3>
+{% if connection.get(key + '_error') %}<p>{{ connection.get(key + '_error') }}</p>{% endif %}
+<ul>{% for item in connection.get(key, []) %}<li>{{ item.name or item.model or 'Apparaat' }} — <code>{{ item.id }}</code>{% if item.state %} · {{ item.state }}{% endif %}</li>{% else %}<li>Geen gegevens beschikbaar.</li>{% endfor %}</ul>{% endfor %}
+</details>
+<details><summary>Recente gebeurtenissen (maximaal 30 dagen)</summary><ul>{% for event in data.get('events', []) %}<li>{{ event.at|time_ago }} · {{ event.mac }} · {{ event.action }}</li>{% else %}<li>Nog geen gebeurtenissen.</li>{% endfor %}</ul></details>
+{% endblock %}

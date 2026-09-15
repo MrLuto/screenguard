@@ -15,6 +15,7 @@ pub mod auth;
 pub mod agents;
 pub mod profiles;
 pub mod usage;
+pub mod unifi;
 
 pub fn router(state: Arc<AppState>) -> Router {
     let public = Router::new()
@@ -24,6 +25,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/auth/login", post(auth::login));
 
     let protected = Router::new()
+        .route("/unifi", get(unifi::status))
+        .route("/unifi/sync", post(unifi::sync))
+        .route("/unifi/clients/{mac}", axum::routing::put(unifi::binding))
         // Auth (me)
         .route("/auth/me", get(auth::get_me).patch(auth::patch_me))
         // Agents

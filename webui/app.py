@@ -9,6 +9,8 @@ Usage:
 
 import json
 import math
+import secrets
+import hmac
 import os
 import requests
 from datetime import date, timedelta, datetime, timezone
@@ -626,6 +628,42 @@ def settings():
     r = api("GET", "/auth/me")
     me = r.json() if r and r.ok else {}
     return render_template("settings.html", me=me, timezones=COMMON_TIMEZONES)
+
+
+@app.route("/unifi", methods=["GET", "POST"])
+@require_login
+def unifi_page():
+    csrf = session.setdefault("unifi_csrf", secrets.token_urlsafe(32))
+    if request.method == "POST":
+        if not hmac.compare_digest(request.form.get("csrf", ""), csrf):
+            return "Invalid form token", 400
+        if request.form.get("action") == "sync":
+            r = api("POST", "/unifi/sync")
+        else:
+            from urllib.parse import quote
+            mac = quote(request.form.get("mac", ""), safe="")
+            r = api("PUT", f"/unifi/clients/{mac}", json={
+                "profile_id": request.form.get("profile_id") or None,
+                "mode": request.form.get("mode", "observe"),
+                "excluded": request.form.get("excluded") == "on",
+            })
+        if r is not None and r.ok:
+            flash("Opgeslagen. UniFi verwerkt de wijziging bij de volgende synchronisatie.", "success")
+        else:
+            message = "UniFi-instellingen konden niet worden opgeslagen."
+            if r is not None:
+                try:
+                    message = r.json().get("error", message)
+                except ValueError:
+                    pass
+            flash(message, "danger")
+        return redirect(url_for("unifi_page"))
+    r = api("GET", "/unifi")
+    data = r.json() if r is not None and r.ok else {"connection": {"error": "Server niet bereikbaar"}}
+    p = api("GET", "/profiles")
+    profiles = p.json().get("profiles", []) if p is not None and p.ok else []
+    return render_template("unifi.html", data=data, connection=data.get("connection") or {},
+                           profiles=profiles, csrf=csrf)
 
 
 # ── run ───────────────────────────────────────────────────────────────────────

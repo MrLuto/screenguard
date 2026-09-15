@@ -35,6 +35,7 @@ pub struct PairingDecision {
 }
 
 pub struct AppState {
+    pub unifi: crate::unifi::Runtime,
     pub db: DbPool,
     pub jwt_secret: String,
     pub jwt_expiry_hours: u64,
@@ -51,6 +52,7 @@ pub struct AppState {
 impl AppState {
     pub fn new(db: DbPool, jwt_secret: String, jwt_expiry_hours: u64) -> Arc<Self> {
         Arc::new(Self {
+            unifi: Default::default(),
             db,
             jwt_secret,
             jwt_expiry_hours,

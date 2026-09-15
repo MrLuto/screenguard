@@ -1,0 +1,30 @@
+# Optional strategic-merge patch. Fill the IDs from the UniFi page before enforcing.
+# kubectl -n screenguard patch deployment screenguard --type=strategic --patch-file deploy/k3s/unifi-patch.yaml
+spec:
+  template:
+    spec:
+      containers:
+        - name: server
+          env:
+            - name: SCREENGUARD_UNIFI_URL
+              value: https://192.168.1.1
+            - name: SCREENGUARD_UNIFI_API_KEY_FILE
+              value: /etc/screenguard-unifi/api-key
+            - name: SCREENGUARD_UNIFI_CA_FILE
+              value: /etc/screenguard-unifi/ca.crt
+            - name: SCREENGUARD_UNIFI_ENFORCE
+              value: "false"
+            # After initial site discovery, add SCREENGUARD_UNIFI_SITE_ID.
+            # After zone discovery, add SCREENGUARD_UNIFI_SOURCE_ZONE_ID and
+            # SCREENGUARD_UNIFI_DESTINATION_ZONE_ID (the external/internet zone).
+            # Set SCREENGUARD_UNIFI_PROTECTED_MACS to comma-separated admin,
+            # k3s-node and infrastructure MAC addresses before enabling enforcement.
+          volumeMounts:
+            - name: unifi-credentials
+              mountPath: /etc/screenguard-unifi
+              readOnly: true
+      volumes:
+        - name: unifi-credentials
+          secret:
+            secretName: screenguard-unifi
+            defaultMode: 0440

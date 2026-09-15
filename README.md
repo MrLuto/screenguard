@@ -314,3 +314,6 @@ GPL-3.0 — see [LICENSE](LICENSE).
 
 For a single-instance k3s deployment at `screenguard.fammudde.nl`, see
 [the k3s handoff](docs/k3s-installatie.md) and `deploy/k3s/`.
+
+For UniFi discovery, profile-linked internet rules, setup and required API permissions,
+see [UniFi integration](docs/unifi-integratie.md). Enforcement defaults to preview mode.

@@ -5,6 +5,7 @@ pub mod release_check;
 pub mod remaining;
 pub mod state;
 pub mod ws;
+pub mod unifi;
 
 use anyhow::Result;
 use axum::{extract::{State, WebSocketUpgrade}, response::Response, routing::get, Router};
@@ -36,6 +37,8 @@ pub async fn run() -> Result<()> {
     });
 
     let state = AppState::new(pool, jwt_secret, cfg.jwt_expiry_hours);
+    unifi::init(&state.db).await?;
+    unifi::spawn(state.clone());
 
     if db::admin_count(&state.db).await? == 0 {
         tracing::warn!("No admin account — call POST /api/v1/auth/setup to create one");
